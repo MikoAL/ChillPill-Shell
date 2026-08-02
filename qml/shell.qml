@@ -327,6 +327,7 @@ ShellRoot {
         }
         Workspaces {}
         Network {}
+        Fcitx5 {}
         Clock {}
       }
 
