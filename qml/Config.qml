@@ -14,7 +14,7 @@ Singleton {
     JsonAdapter {
       id: adapter
       property string displayPicture: Quickshell.env("HOME") + "/.pfp.png"
-      property string clockFormat: "hh:mm"
+      property string clockFormat: "MMM d  HH:mm:ss"
       property int pillTopMargin: 9
       property int pillBottomMargin: 26
       property string textFontFamily: "Monocraft"
@@ -33,7 +33,26 @@ Singleton {
       property bool avoidDuplicateNotifications: true
       property string defaultTerminal: "kitty"
       property real pillScale: 1.0
+      property int sysMonitorInterval: 2000
+      property bool showSsidInBar: false
+      property string ramDisplay: "percent"
+      property string netExcludeInterfaces: "^(lo|docker|veth|br-|virbr|tun|wg)"
+      property int zoneGap: 20
+      property int pillSidePadding: 16
     }
+  }
+
+  // deterministic rate formatter shared by the net/cpu modules.
+  // scales to K/M/G on 1024 boundaries, one decimal below 10, zero at/above,
+  // single-char unit, no /s. 0 renders as "0K".
+  function formatRate(bytesPerSec) {
+    if (bytesPerSec <= 0) return "0K"
+    let v = bytesPerSec / 1024.0
+    let u = 0
+    const units = ["K", "M", "G"]
+    while (v >= 1024 && u < units.length - 1) { v /= 1024; u++ }
+    if (v < 10) return v.toFixed(1) + units[u]
+    return Math.round(v) + units[u]
   }
 
   readonly property alias displayPicture: adapter.displayPicture
@@ -56,5 +75,11 @@ Singleton {
   readonly property alias avoidDuplicateNotifications: adapter.avoidDuplicateNotifications
   readonly property alias defaultTerminal: adapter.defaultTerminal
   readonly property alias pillScale: adapter.pillScale
+  readonly property alias sysMonitorInterval: adapter.sysMonitorInterval
+  readonly property alias showSsidInBar: adapter.showSsidInBar
+  readonly property alias ramDisplay: adapter.ramDisplay
+  readonly property alias netExcludeInterfaces: adapter.netExcludeInterfaces
+  readonly property alias zoneGap: adapter.zoneGap
+  readonly property alias pillSidePadding: adapter.pillSidePadding
   readonly property real paddingScale: 1 + (pillScale - 1) * 0.6  // sub linear, keep padding sane
 }

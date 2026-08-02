@@ -80,13 +80,18 @@ RowLayout {
   }
 
   // percentage
+  TextMetrics { id: volMetrics; font: volText.font; text: "100%" }
+
   Text {
+    id: volText
     text: {
       if (!root.ready) return "-"
       if (root.muted) return "0%"
       return root.vol + "%"
     }
     color: fg
+    Layout.preferredWidth: volMetrics.width
+    horizontalAlignment: Text.AlignRight
 
     font {
       pixelSize: 10 * Config.pillScale

@@ -39,7 +39,7 @@ Item {
     // refresh every minute
     Timer {
         interval: 60000
-        running: box.miniDashboard
+        running: box.dashboard
         repeat: true
         triggeredOnStart: true
         onTriggered: {

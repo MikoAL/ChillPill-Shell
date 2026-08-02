@@ -13,12 +13,17 @@ RowLayout {
   id: root
 
   spacing: 4 * Config.paddingScale
+  visible: root.fcitxRunning  // zero width when fcitx5 isn't running
 
   property string currentIm: "" // from `fcitx5-remote -n`
   property string imState: ""   // from `fcitx5-remote`: 0 close, 1 inactive, 2 active
 
   readonly property bool active: imState === "2"
   readonly property bool chewing: currentIm === "chewing"
+
+  // fcitx5-remote prints nothing when fcitx5 isn't running -> hide entirely
+  // (zero width) instead of showing a stale glyph.
+  readonly property bool fcitxRunning: imState !== ""
 
   readonly property string label: {
     if (root.active && root.chewing) return "中"
@@ -71,13 +76,20 @@ RowLayout {
 
   Component.onCompleted: root.query()
 
+  // reserve the worst-case label width ("EN") so the bar never breathes
+  // when toggling between 中 / EN / —
+  TextMetrics { id: labelMetrics; font: labelText.font; text: "EN" }
+
   Text {
+    id: labelText
     text: root.label
     color: {
       if (root.active && root.chewing) return "#5892f3"
       if (root.imState === "" || root.imState === "0") return "#666666"
       return Theme.fg
     }
+    Layout.preferredWidth: labelMetrics.width
+    horizontalAlignment: Text.AlignRight
     font {
       family: Theme.fontFamily
       pixelSize: 10 * Config.pillScale

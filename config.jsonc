@@ -1,6 +1,6 @@
 {
   "displayPicture": "/home/xingyun/.pfp.png",
-  "clockFormat": "hh:mm",
+  "clockFormat": "MMM d  HH:mm:ss",
   "pillTopMargin": 9,
   "pillBottomMargin": 26,
   "textFontFamily": "Monocraft",
@@ -18,5 +18,11 @@
   "weatherRefreshInterval": 3600000,
   "avoidDuplicateNotifications": true,
   "defaultTerminal": "kitty",
-  "pillScale": 1.0
+  "pillScale": 1.0,
+  "sysMonitorInterval": 2000,
+  "showSsidInBar": false,
+  "ramDisplay": "percent",
+  "netExcludeInterfaces": "^(lo|docker|veth|br-|virbr|tun|wg)",
+  "zoneGap": 20,
+  "pillSidePadding": 16
 }

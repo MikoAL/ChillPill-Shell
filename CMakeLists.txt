@@ -12,6 +12,8 @@ qt_add_qml_module(IslandBackend
     VERSION 1.0
     PLUGIN_TARGET IslandBackendPlugin
     SOURCES
+        backend/SysMonitor.h
+        backend/SysMonitor.cpp
         backend/WifiController.h
         backend/WifiController.cpp
         backend/WifiNetworkModel.h

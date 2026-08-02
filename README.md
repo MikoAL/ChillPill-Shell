@@ -109,7 +109,7 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 | Option | Description | Default |
 |---|---|---|
 | `displayPicture` | Profile image path for mini dashboard | `/home/<user>/.pfp.png` |
-| `clockFormat` | Clock format for the pill bar | `hh:mm` |
+| `clockFormat` | Clock format for the pill bar | `MMM d  HH:mm:ss` |
 | `pillTopMargin` | Top spacing of pill bar | `9` |
 | `pillBottomMargin` | Bottom spacing of pill bar | `26` |
 | `pillScale` | Scale factor for pill bar size | `1.0` |
@@ -128,6 +128,12 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 | `weatherUnits` | Temperature units: `metric` (°C) or `imperial` (°F) | `metric` |
 | `weatherRefreshInterval` | Weather refresh interval (ms) | `3600000` (1 hr) |
 | `defaultTerminal` | Terminal used to open TUI apps from launcher | `kitty` |
+| `sysMonitorInterval` | CPU/RAM/network sampling interval (ms) | `2000` |
+| `showSsidInBar` | Show the Wi-Fi SSID text in the pill bar | `false` |
+| `ramDisplay` | RAM display: `percent` or `used` (GiB) | `percent` |
+| `netExcludeInterfaces` | Regex of interfaces excluded from net rate | `^(lo\|docker\|veth\|br-\|virbr\|tun\|wg)` |
+| `zoneGap` | Gap between bar zones around the clock (px) | `20` |
+| `pillSidePadding` | Padding between bar zones and pill edges (px) | `16` |
 
 <details>
 <summary>Raw config example</summary>
@@ -135,7 +141,7 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 ```jsonc
 {
   "displayPicture": "/home/<user>/.pfp.png",
-  "clockFormat": "hh:mm",
+  "clockFormat": "MMM d  HH:mm:ss",
   "pillTopMargin": 9,
   "pillBottomMargin": 26,
   "textFontFamily": "Monocraft",
@@ -153,7 +159,13 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
   "weatherRefreshInterval": 3600000,
   "avoidDuplicateNotifications": true,
   "defaultTerminal": "kitty",
-  "pillScale": 1.0
+  "pillScale": 1.0,
+  "sysMonitorInterval": 2000,
+  "showSsidInBar": false,
+  "ramDisplay": "percent",
+  "netExcludeInterfaces": "^(lo|docker|veth|br-|virbr|tun|wg)",
+  "zoneGap": 20,
+  "pillSidePadding": 16
 }
 ```
 </details>
@@ -233,11 +245,15 @@ Keybindings are recommended for ChillPill-Shell in your Hyprland, Just paste thi
 > Adjust key combinations by your preferences
 
 ```
-hl.bind(mainMod .. " + CTRL + C",  hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call controlCenter toggle"))
+hl.bind(mainMod .. " + CTRL + C",  hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call dashboard toggle"))
 hl.bind(mainMod .. " + CTRL + V",  hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call cliphist toggle"))
-hl.bind(mainMod .. " + CTRL + B",  hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call miniDashboard toggle"))
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call appLauncher toggle"))
 ```
+
+The control center and mini dashboard were merged into a single **dashboard** panel
+(`qs ipc -p /usr/share/chillpill-shell call dashboard toggle`). The old
+`controlCenter` / `miniDashboard` IPC targets still work as thin aliases for one
+release, but the recommended binding is the `dashboard` one above.
 
 ---
 

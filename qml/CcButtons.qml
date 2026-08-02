@@ -14,21 +14,16 @@ RowLayout {
   property color buttonFgOff
 
   property bool notificationPopup: false
-  property bool controlCenterOpen: false
+  property bool dashboardOpen: false
   property bool mediaAutoOpened: false
   property bool wifiPanelOpened: false
   property bool hasPlayer: false
   property real playerHeight: 0
 
-  anchors.top: parent.top
-  anchors.topMargin: hasPlayer ? playerHeight + 92 : 5
-  anchors.left: parent.left
-  anchors.right: parent.right
-  anchors.leftMargin: 5
-  anchors.rightMargin: 5
+  Layout.fillWidth: true
 
-  onControlCenterOpenChanged: {
-    if (!controlCenterOpen) root.wifiPanelOpened = false
+  onDashboardOpenChanged: {
+    if (!dashboardOpen) root.wifiPanelOpened = false
   }
 
   // wifi
@@ -37,7 +32,7 @@ RowLayout {
     width: root.buttonWidth
     height: root.buttonHeight
     radius: root.buttonRadius
-    visible: root.controlCenterOpen && !root.mediaAutoOpened
+    visible: root.dashboardOpen && !root.mediaAutoOpened
     color: WifiController.enabled ? "#212529" : (wifiHover.hovered ? Qt.lighter(root.buttonBgOff, 1.5) : root.buttonBgOff)
     border.width: buttonBorderWidth
     border.color: buttonBorderColor
@@ -99,7 +94,7 @@ RowLayout {
     width: root.buttonWidth
     height: root.buttonHeight
     radius: root.buttonRadius
-    visible: root.controlCenterOpen && !root.mediaAutoOpened
+    visible: root.dashboardOpen && !root.mediaAutoOpened
     color: notificationModule.dndEnabled ? "#2e2c28" : (dndHover.hovered ? Qt.lighter(root.buttonBgOff, 1.5) : root.buttonBgOff)
     border.width: buttonBorderWidth
     border.color: buttonBorderColor

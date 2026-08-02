@@ -34,7 +34,7 @@ Item {
 
     Timer {
         interval: Config.bandwidthRefreshInterval
-        running: box.miniDashboard
+        running: box.dashboard
         repeat: true
         triggeredOnStart: true
         onTriggered: {

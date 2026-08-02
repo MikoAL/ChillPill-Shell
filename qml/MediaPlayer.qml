@@ -1,14 +1,13 @@
 import Quickshell
 import Quickshell.Widgets
 import QtQuick
+import QtQuick.Layouts
 import Quickshell.Services.Mpris
 
 Rectangle {
     id: mediaCard
-    anchors.top: parent.top
-    anchors.left: parent.left
-    anchors.right: parent.right
-    height: mprisModule.hasPlayer ? 118 : 0
+    Layout.fillWidth: true
+    Layout.preferredHeight: mprisModule.hasPlayer ? 118 : 0
     radius: 12
     color: "#212121"
     visible: mprisModule.hasPlayer
@@ -39,7 +38,7 @@ Rectangle {
     Timer {
         id: progressPoller
         interval: 1000
-        running: box.controlCenter && mprisModule.hasPlayer
+        running: box.dashboard && mprisModule.hasPlayer
         repeat: true
         triggeredOnStart: true
         onTriggered: {

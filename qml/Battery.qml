@@ -23,10 +23,15 @@ RowLayout {
     }
   }
 
-  // percentage
+  // percentage — fixed width so the pill never breathes when it changes
+  TextMetrics { id: batteryMetrics; font: pctText.font; text: "100%" }
+
   Text {
+    id: pctText
     text: box.batteryLevel + "%"
     color: fg
+    Layout.preferredWidth: batteryMetrics.width
+    horizontalAlignment: Text.AlignRight
 
     font {
       family: Theme.fontFamily

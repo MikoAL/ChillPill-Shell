@@ -39,6 +39,9 @@ RowLayout {
       }
 
       // clickable text buttons
+      // NOTE: this machine runs a Lua-config Hyprland variant where the
+      // dispatcher socket expects hl.dsp.focus({ workspace = N }) — the plain
+      // "workspace N" syntax errors out. Verified live on 0.55.2.
       MouseArea {
         anchors.fill: parent
         onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + (wsButton.index + 1 + "})"))
