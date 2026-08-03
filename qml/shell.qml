@@ -662,11 +662,17 @@ ShellRoot {
                 color: "#3a3a3a"
 
                 Rectangle {
-                  width: parent.width * (volumeModule.vol / 100)
+                  // animate the *fraction*, not the width: the fill is a pure
+                  // function of the current track width, so it can never lag
+                  // behind the track with a stale width when the dashboard
+                  // opens/closes (that briefly made the bar look over-long,
+                  // e.g. volume ~70% while the number said 60%)
+                  property real fillFraction: volumeModule.vol / 100
+                  width: parent.width * fillFraction
                   height: parent.height
                   radius: box.sliderRadius
                   color: box.sliderColor
-                  Behavior on width { NumberAnimation { duration: 60 } }
+                  Behavior on fillFraction { NumberAnimation { duration: 60 } }
                 }
 
                 MouseArea {
@@ -712,11 +718,15 @@ ShellRoot {
                 color: "#3a3a3a"
 
                 Rectangle {
-                  width: parent.width * brightnessModule.percent
+                  // animate the *fraction*, not the width (see volume slider
+                  // above): the fill tracks the track width exactly, so it can
+                  // never overshoot past 100% when the dashboard opens/closes
+                  property real fillFraction: brightnessModule.percent
+                  width: parent.width * fillFraction
                   height: parent.height
                   radius: box.sliderRadius
                   color: box.sliderColor
-                  Behavior on width { NumberAnimation { duration: 60 } }
+                  Behavior on fillFraction { NumberAnimation { duration: 60 } }
                 }
 
                 MouseArea {
