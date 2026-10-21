@@ -29,10 +29,17 @@ Item {
   property int maxStored: Config.maxNotificationsInStack
   property bool avoidDuplicateNotifications: Config.avoidDuplicateNotifications
 
-  SoundEffect {
+  // only created while sound is enabled: instantiating a SoundEffect loads
+  // the whole FFmpeg multimedia backend (~25MB private memory, extra threads)
+  Loader {
     id: notifySound
-    source: "file://" + Quickshell.shellDir + "/share/notification.wav"
-    volume: 1
+    active: Config.loaded && Config.notificationSound
+    sourceComponent: Component {
+      SoundEffect {
+        source: "file://" + Quickshell.shellDir + "/share/notification.wav"
+        volume: 1
+      }
+    }
   }
 
   // DND survives restarts. kept out of config.jsonc so writing it back
@@ -50,7 +57,8 @@ Item {
   }
 
   function trigger(): void {
-    if (Config.notificationSound && notifySound.status === SoundEffect.Ready) notifySound.play()
+    const sound = notifySound.item
+    if (sound && sound.status === SoundEffect.Ready) sound.play()
   }
 
   function syncReversed(): void {

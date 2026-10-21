@@ -5,10 +5,17 @@ import Quickshell.Io
 Singleton {
   id: root
 
+  // false until the file has been read (or found missing): the adapter holds
+  // the fallback values below until then, which matters for anything that's
+  // costly to create and then throw away (e.g. the notification SoundEffect)
+  property bool loaded: false
+
   FileView {
     path: Quickshell.env("HOME") + "/.config/chillpill-shell/config.jsonc"
     watchChanges: true
     onFileChanged: reload()
+    onLoaded: root.loaded = true
+    onLoadFailed: root.loaded = true
 
     // fallback values
     JsonAdapter {

@@ -7,6 +7,13 @@ namespace {
 
 constexpr qint64 kKiB = 1024;
 
+// compiled once; constructing a QRegularExpression per parsed line is the
+// most expensive part of a sample
+const QRegularExpression &whitespace() {
+    static const QRegularExpression re(QStringLiteral("\\s+"));
+    return re;
+}
+
 // First line of /proc/stat: "cpu  user nice system idle iowait irq softirq steal guest guest_nice"
 struct CpuTimes {
     quint64 busy = 0;   // user+nice+system+irq+softirq+steal
@@ -15,7 +22,7 @@ struct CpuTimes {
 
 CpuTimes parseCpuTimes(const QString &line) {
     CpuTimes t;
-    const QStringList fields = line.split(QRegularExpression(QStringLiteral("\\s+")));
+    const QStringList fields = line.split(whitespace());
     // fields[0] == "cpu"; skip it. Anything missing is treated as 0.
     const auto val = [&fields](int idx) -> quint64 {
         return idx < fields.size() ? fields.at(idx).toULongLong() : 0;
@@ -147,8 +154,7 @@ void SysMonitor::readCpu() {
         m_prevIdle = t.total - t.busy;
         m_prevTotal = t.total;
         m_firstCpuTick = false;
-        m_cpuPercent = 0.0;
-        emit cpuPercentChanged();
+        setCpuPercent(0.0);
         return;
     }
 
@@ -162,8 +168,7 @@ void SysMonitor::readCpu() {
         return;
 
     const quint64 busyDelta = totalDelta - idleDelta;
-    m_cpuPercent = qBound<qreal>(0.0, (qreal(busyDelta) / qreal(totalDelta)) * 100.0, 100.0);
-    emit cpuPercentChanged();
+    setCpuPercent(qBound<qreal>(0.0, (qreal(busyDelta) / qreal(totalDelta)) * 100.0, 100.0));
 }
 
 void SysMonitor::readMemory() {
@@ -177,8 +182,7 @@ void SysMonitor::readMemory() {
     QTextStream stream(&file);
     QString line;
     while (stream.readLineInto(&line)) {
-        const QStringList fields = line.split(QRegularExpression(QStringLiteral("\\s+")),
-                                               Qt::SkipEmptyParts);
+        const QStringList fields = line.split(whitespace(), Qt::SkipEmptyParts);
         if (fields.size() < 2)
             continue;
         if (fields.at(0) == QStringLiteral("MemTotal:")) {
@@ -233,8 +237,7 @@ void SysMonitor::readNet() {
         if (iface == QLatin1String("lo") || m_netExcludeRegex.match(iface).hasMatch())
             continue;
 
-        const QStringList numbers = line.mid(colon + 1).split(QRegularExpression(QStringLiteral("\\s+")),
-                                                               Qt::SkipEmptyParts);
+        const QStringList numbers = line.mid(colon + 1).split(whitespace(), Qt::SkipEmptyParts);
         if (numbers.size() < 9)
             continue;
 
@@ -247,10 +250,7 @@ void SysMonitor::readNet() {
         m_prevRx = rxBytes;
         m_prevTx = txBytes;
         m_firstNetTick = false;
-        m_rxBytesPerSec = 0.0;
-        m_txBytesPerSec = 0.0;
-        emit rxBytesPerSecChanged();
-        emit txBytesPerSecChanged();
+        setNetRates(0.0, 0.0);
         return;
     }
 
@@ -263,8 +263,26 @@ void SysMonitor::readNet() {
     m_prevRx = rxBytes;
     m_prevTx = txBytes;
 
-    m_rxBytesPerSec = qMax<qint64>(0, rxDelta) * 1000.0 / elapsedMs;
-    m_txBytesPerSec = qMax<qint64>(0, txDelta) * 1000.0 / elapsedMs;
-    emit rxBytesPerSecChanged();
-    emit txBytesPerSecChanged();
+    setNetRates(qMax<qint64>(0, rxDelta) * 1000.0 / elapsedMs,
+                qMax<qint64>(0, txDelta) * 1000.0 / elapsedMs);
+}
+
+// skip notifies for unchanged values: an idle machine reports the same cpu %
+// and 0 throughput tick after tick, and every notify re-runs the QML bindings
+void SysMonitor::setCpuPercent(qreal pct) {
+    if (pct == m_cpuPercent)
+        return;
+    m_cpuPercent = pct;
+    emit cpuPercentChanged();
+}
+
+void SysMonitor::setNetRates(qreal rx, qreal tx) {
+    if (rx != m_rxBytesPerSec) {
+        m_rxBytesPerSec = rx;
+        emit rxBytesPerSecChanged();
+    }
+    if (tx != m_txBytesPerSec) {
+        m_txBytesPerSec = tx;
+        emit txBytesPerSecChanged();
+    }
 }

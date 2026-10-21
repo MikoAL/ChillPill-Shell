@@ -16,9 +16,6 @@ RowLayout {
   readonly property bool muted: ready && sink.audio.muted
   readonly property int vol: ready ? Math.round(sink.audio.volume * 100) : 0
 
-  readonly property var sinkProps: ready ? sink.properties : ({})
-  onSinkPropsChanged: console.log("PW sink props:", JSON.stringify(sinkProps))
-
   property string activePort: ""
   readonly property bool isHeadphone: activePort.indexOf("headphone") !== -1
                                      || activePort.indexOf("headset") !== -1
@@ -35,12 +32,20 @@ RowLayout {
     stdout: SplitParser { onRead: data => root.activePort = data.trim() }
   }
 
+  // every volume step is also a "change on sink" event; coalesce them so a
+  // slider drag or held volume key doesn't spawn a pactl pipeline per event
+  Timer {
+    id: portCheckDebounce
+    interval: 250
+    onTriggered: root.checkPort()
+  }
+
   // watch for jack plug/unplug events ral time
   Process {
     running: true
     command: ["pactl", "subscribe"]
     stdout: SplitParser {
-      onRead: data => { if (data.indexOf("on sink") !== -1) root.checkPort() }
+      onRead: data => { if (data.indexOf("on sink") !== -1) portCheckDebounce.restart() }
     }
   }
 
@@ -59,13 +64,7 @@ RowLayout {
   Text {
     text: root.icon
 
-    color: {
-      if (root.muted || vol === 0) {
-        console.log("audio volume status:", root.muted)
-        return root.mutedFg
-      }
-      return root.fg
-    }
+    color: root.muted || vol === 0 ? root.mutedFg : root.fg
 
     font.family: Theme.nerdFontFamily
     font.pixelSize: 10 * Config.pillScale

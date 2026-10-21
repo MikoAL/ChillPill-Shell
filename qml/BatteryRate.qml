@@ -17,7 +17,11 @@ RowLayout {
     ? samples.reduce((sum, s) => sum + s, 0) / samples.length
     : 0
 
+  // UPower only updates the rate every few seconds or so; once the window is
+  // full of the same reading the average can't move, so sampling idles
+  // until the next change instead of ticking forever
   Timer {
+    id: sampler
     interval: 1000
     running: true
     repeat: true
@@ -25,7 +29,13 @@ RowLayout {
     onTriggered: {
       const next = root.samples.concat([Math.abs(box.battery.changeRate)])
       root.samples = next.length > 5 ? next.slice(next.length - 5) : next
+      if (root.samples.length === 5 && root.samples.every(s => s === root.samples[0])) stop()
     }
+  }
+
+  Connections {
+    target: box.battery
+    function onChangeRateChanged() { if (!sampler.running) sampler.start() }
   }
 
   spacing: 4 * Config.paddingScale

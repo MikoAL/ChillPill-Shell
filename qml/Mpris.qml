@@ -26,9 +26,16 @@ Item {
         activePlayer.playbackState === MprisPlaybackState.Paused
     )
 
+    // only the dashboard's media card shows progress, so the 250ms poll runs
+    // while something is watching (bound from shell.qml)
+    property bool polling: true
+    // refresh synchronously so the media card never shows a stale position
+    onPollingChanged: if (polling) pollProgress()
+
     property real polledPosition: 0
     property real polledLength: 0
     property real lastPollTime: 0
+    property bool lastPollPlaying: false
     property string lastTrackKey: ""
     property real lengthCache: 0
     readonly property real progress: polledLength > 0 ? polledPosition / polledLength : 0
@@ -45,10 +52,16 @@ Item {
         const now = Date.now()
         const delta = lastPollTime > 0 ? (now - lastPollTime) / 1000 : 0
         lastPollTime = now
+        // the gap since the last poll can be long while the dashboard is
+        // closed; it only counts toward the estimate below if the player was
+        // playing through it (pause/resume/track changes poll immediately)
+        const wasPlaying = lastPollPlaying
+        lastPollPlaying = root.playing
 
         // restart the local position estimate whenever the track changes
         const trackKey = (activePlayer.trackTitle || "") + "\u0000" + (activePlayer.trackArtUrl || "")
-        if (trackKey !== lastTrackKey) {
+        const trackChanged = trackKey !== lastTrackKey
+        if (trackChanged) {
             lastTrackKey = trackKey
             polledPosition = 0
             lengthCache = 0
@@ -72,7 +85,7 @@ Item {
 
         if (activePlayer.positionSupported) {
             polledPosition = Number(activePlayer.position) || 0
-        } else if (root.playing && len > 0) {
+        } else if (wasPlaying && !trackChanged && len > 0) {
             // browser tabs etc. don't expose the Position property: keep a
             // local wall-clock estimate so the bar and time left still advance
             if (delta > 0) polledPosition += delta
@@ -82,7 +95,7 @@ Item {
     Timer {
         id: positionTimer
         interval: 250
-        running: root.hasPlayer
+        running: root.hasPlayer && root.polling
         repeat: true
         triggeredOnStart: true
         onTriggered: root.pollProgress()
@@ -92,6 +105,9 @@ Item {
         target: root.activePlayer
         function onPositionChanged() { root.pollProgress() }
         function onLengthChanged() { root.pollProgress() }
+        function onPlaybackStateChanged() { root.pollProgress() }
+        function onTrackTitleChanged() { root.pollProgress() }
+        function onTrackArtUrlChanged() { root.pollProgress() }
       }
 
     function resolveActivePlayer() {

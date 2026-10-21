@@ -1,80 +1,38 @@
 import Quickshell
-import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
+import IslandBackend
 
 // fcitx5 input method indicator for the pill bar.
 //
 // Shows "中" while the chewing (zhuyin) input method is active, "EN"
 // while typing in the latin layout, and "—" when fcitx5 isn't running.
 // Clicking cycles between the input methods of the active group
-// (keyboard-us <-> chewing) via fcitx5-remote.
+// (keyboard-us <-> chewing), like `fcitx5-remote -s`.
 RowLayout {
   id: root
 
   spacing: 4 * Config.paddingScale
   visible: root.fcitxRunning  // zero width when fcitx5 isn't running
 
-  property string currentIm: "" // from `fcitx5-remote -n`
-  property string imState: ""   // from `fcitx5-remote`: 0 close, 1 inactive, 2 active
+  // state/IM come from the backend's D-Bus poller (see Fcitx5Monitor.h).
+  // fcitx5 emits no signal on an IM switch, and the old `busctl monitor` +
+  // fcitx5-remote approach fed itself: every query was bus traffic the
+  // monitor reported, which re-armed the query, ~12 queries/s forever.
+  readonly property string currentIm: Fcitx5Monitor.currentIm
+  readonly property int imState: Fcitx5Monitor.state  // 0 close, 1 inactive, 2 active
 
-  readonly property bool active: imState === "2"
+  readonly property bool active: imState === 2
   readonly property bool chewing: currentIm === "chewing"
 
-  // fcitx5-remote prints nothing when fcitx5 isn't running -> hide entirely
-  // (zero width) instead of showing a stale glyph.
-  readonly property bool fcitxRunning: imState !== ""
+  // hide entirely (zero width) instead of showing a stale glyph
+  readonly property bool fcitxRunning: Fcitx5Monitor.available
 
   readonly property string label: {
     if (root.active && root.chewing) return "中"
-    if (root.imState === "" || root.imState === "0") return "—"
+    if (!root.fcitxRunning || root.imState === 0) return "—"
     return "EN"
   }
-
-  // re-read both fcitx5 state and current input method
-  function query() {
-    imStateProc.running = false
-    imStateProc.running = true
-    imQuery.running = false
-    imQuery.running = true
-  }
-
-  Process {
-    id: imStateProc
-    command: ["fcitx5-remote"]
-    stdout: StdioCollector {
-      onStreamFinished: root.imState = this.text.trim()
-    }
-  }
-
-  Process {
-    id: imQuery
-    command: ["fcitx5-remote", "-n"]
-    stdout: StdioCollector {
-      onStreamFinished: root.currentIm = this.text.trim()
-    }
-  }
-
-  // busctl monitor spews many lines per state change; debounce them
-  // into a single query
-  Timer {
-    id: queryDebounce
-    interval: 80
-    onTriggered: root.query()
-  }
-
-  // watch fcitx5 signals so the bar updates without polling
-  // (same pattern as Volume.qml's `pactl subscribe`)
-  Process {
-    id: imWatch
-    command: ["busctl", "--user", "monitor", "org.fcitx.Fcitx5"]
-    running: true
-    stdout: SplitParser {
-      onRead: data => queryDebounce.restart()
-    }
-  }
-
-  Component.onCompleted: root.query()
 
   // reserve the worst-case label width ("EN") so the bar never breathes
   // when toggling between 中 / EN / —
@@ -85,7 +43,7 @@ RowLayout {
     text: root.label
     color: {
       if (root.active && root.chewing) return "#5892f3"
-      if (root.imState === "" || root.imState === "0") return "#666666"
+      if (!root.fcitxRunning || root.imState === 0) return "#666666"
       return Theme.fg
     }
     Layout.preferredWidth: labelMetrics.width
@@ -102,14 +60,7 @@ RowLayout {
   HoverHandler { cursorShape: Qt.PointingHandCursor }
   TapHandler {
     gesturePolicy: TapHandler.ReleaseWithinBounds
-    onTapped: {
-      // cycle between the IMs of the default group
-      imSet.command = ["fcitx5-remote", "-s", root.chewing ? "keyboard-us" : "chewing"]
-      imSet.running = false
-      imSet.running = true
-      root.query()
-    }
+    // cycle between the IMs of the default group
+    onTapped: Fcitx5Monitor.setCurrentIm(root.chewing ? "keyboard-us" : "chewing")
   }
-
-  Process { id: imSet }
 }

@@ -42,8 +42,6 @@ Item {
     function refresh() {
         listProc.running = false
         listProc.running = true
-        listCountProc.running = false
-        listCountProc.running = true
     }
 
     function copySelected() {
@@ -127,23 +125,8 @@ Item {
     }
 
     Process {
-      id: listCountProc
-      command: ["sh", "-c", "cliphist list | wc -l"]
-      running: false
-      stdout: StdioCollector {
-        onStreamFinished: {
-          listCountText.total = this.text.trim();
-        }
-      }
-    }
-
-    Process {
         id: deleteProc
         running: false
-        onRunningChanged: if (!running) {
-            listCountProc.running = false
-            listCountProc.running = true
-        }
     }
 
     Process {
@@ -179,9 +162,9 @@ Item {
 
           Text {
             id: listCountText
-            property int total: 0
+            // the script lists every cliphist entry, so no second `cliphist list | wc -l`
             text: (root.filteredEntries.length === 0 ? 0 : root.selectedIndex + 1)
-                   + " / " + root.filteredEntries.length + " (" + total + ")"
+                   + " / " + root.filteredEntries.length + " (" + root.entries.length + ")"
             color: "#999999"
             font { family: Theme.fontFamily; pixelSize: 9; weight: 300 }
             Layout.rightMargin: 6

@@ -14,6 +14,8 @@ qt_add_qml_module(IslandBackend
     SOURCES
         backend/SysMonitor.h
         backend/SysMonitor.cpp
+        backend/Fcitx5Monitor.h
+        backend/Fcitx5Monitor.cpp
         backend/WifiController.h
         backend/WifiController.cpp
         backend/WifiNetworkModel.h

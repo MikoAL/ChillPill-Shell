@@ -85,10 +85,16 @@ ShellRoot {
     WlrLayershell.layer: WlrLayershell.Top
     WlrLayershell.keyboardFocus: (box.cliphistOpen || box.appLauncher || box.dashboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     // tall enough for the popups (calendar / weather) that hang below the
-    // pill, and grows with the pill when a full dashboard (media player +
-    // notification stack) pushes it past that; otherwise the compositor
-    // clips the bottom of the box
-    implicitHeight: Math.max(482, Math.ceil(box.height) + 8)
+    // pill while the dashboard is up, and grows with the pill when a full
+    // dashboard (media player + notification stack) pushes it past that;
+    // otherwise the compositor clips the bottom of the box.
+    // The rest of the time it hugs the pill: Qt repaints the whole surface on
+    // every clock tick / metrics update, and a full-width 482px transparent
+    // window is ~10x the pixels of the bar. During a height animation it
+    // holds the larger end (heightEnvelope) so it isn't resized every frame.
+    implicitHeight: Math.max(
+        box.dashboard || calendarPopup.visible || weatherPopupLoader.active ? 482 : 0,
+        Math.ceil(Math.max(box.height, box.heightEnvelope)) + 8)
 
     anchors {
       top: true
@@ -275,11 +281,15 @@ ShellRoot {
         onTriggered: box.ready = true
       }
 
+      // larger end of the running height animation (see the window's height)
+      property real heightEnvelope: 0
+
       onImplicitHeightChanged: {
           heightAnim.stop()
           heightAnim.to = implicitHeight
           heightAnim.duration = 550
           heightAnim.start()
+          heightEnvelope = Math.max(height, implicitHeight)
       }
 
       // width of the bar row: three zones with the clock on the true geometric
@@ -342,7 +352,10 @@ ShellRoot {
       }
 
       Behavior on implicitWidth { NumberAnimation { duration: 225; easing.type: Easing.OutExpo } }
-      NumberAnimation { id: heightAnim; target: box; property: "height"; easing.type: Easing.OutExpo }
+      NumberAnimation {
+        id: heightAnim; target: box; property: "height"; easing.type: Easing.OutExpo
+        onRunningChanged: if (!running) box.heightEnvelope = box.height
+      }
 
       // hovering a toast holds it on screen
       Binding {
@@ -610,33 +623,27 @@ ShellRoot {
             Layout.fillWidth: true
             spacing: 10
 
-            // username
-            Process {
-              id: whoamiProc
-              command: ["sh", "-c", 'whoami']
-              running: true
-              stdout: StdioCollector {
-                onStreamFinished: { whoamiText.text = this.text.trim(); whoamiProc.running = false }
-              }
+            // hostname / uptime come straight from the files, no subprocesses
+            FileView {
+              path: "/etc/hostname"
+              onLoaded: hostnameText.text = "(" + text().trim() + ")"
             }
 
-            // hostname
-            Process {
-              id: hostnameProc
-              command: ["sh", "-c", "cat /etc/hostname"]
-              running: true
-              stdout: StdioCollector {
-                onStreamFinished: { hostnameText.text = "(" + this.text.trim() + ")"; hostnameProc.running = false }
-              }
-            }
-
-            // uptime
-            Process {
-              id: uptimeProc
-              command: ["sh", "-c", 'uptime -p']
-              running: true
-              stdout: StdioCollector {
-                onStreamFinished: uptimeText.text = this.text
+            // formats /proc/uptime the way `uptime -p` does ("up 2 hours, 5 minutes")
+            FileView {
+              id: uptimeFile
+              path: "/proc/uptime"
+              onLoaded: {
+                const total = Math.floor(parseFloat(text()) / 60)
+                const units = [["week", 10080], ["day", 1440], ["hour", 60], ["minute", 1]]
+                const parts = []
+                let rest = total
+                for (const [name, mins] of units) {
+                  const n = Math.floor(rest / mins)
+                  rest -= n * mins
+                  if (n > 0) parts.push(n + " " + name + (n === 1 ? "" : "s"))
+                }
+                uptimeText.text = "up " + (parts.length ? parts.join(", ") : "0 minutes")
               }
             }
 
@@ -646,10 +653,7 @@ ShellRoot {
               running: box.dashboard
               repeat: true
               triggeredOnStart: true
-              onTriggered: {
-                uptimeProc.running = false
-                uptimeProc.running = true
-              }
+              onTriggered: uptimeFile.reload()
             }
 
             // profile picture (display picture)
@@ -691,6 +695,7 @@ ShellRoot {
               RowLayout {
                 Text {
                   id: whoamiText
+                  text: Quickshell.env("USER")
                   color: Theme.fg
                   Layout.leftMargin: 10
                   font { family: Theme.fontFamily; pixelSize: 13; weight: 600 }
@@ -1300,9 +1305,14 @@ ShellRoot {
           }
         }
       }
+      // tick per second only if the bar format shows seconds (the dashboard
+      // date is minute-precision), and not at all while the pill is hidden
+      // behind a fullscreen window: each tick repaints the bar surface
       SystemClock {
         id: clock
-        precision: SystemClock.Seconds
+        enabled: !box.hidden
+        precision: /s/.test(Config.clockFormat.replace(/'[^']*'/g, ""))
+                   ? SystemClock.Seconds : SystemClock.Minutes
       }
     }
 
@@ -1357,7 +1367,7 @@ ShellRoot {
     }
   }
 
-  Mpris { id: mprisModule; visible: false }
+  Mpris { id: mprisModule; visible: false; polling: box.dashboard }
 
   CountdownModule { id: countdownModule; visible: false }
 
@@ -1366,6 +1376,8 @@ ShellRoot {
   Binding { target: SysMonitor; property: "interval"; value: Config.sysMonitorInterval }
   Binding { target: SysMonitor; property: "netExcludeInterfaces"; value: Config.netExcludeInterfaces }
   Binding { target: SysMonitor; property: "running"; value: !fullscreenActive && !notifFullscreenMode }
+  // same for the fcitx5 indicator's D-Bus poll
+  Binding { target: Fcitx5Monitor; property: "polling"; value: !fullscreenActive && !notifFullscreenMode }
 
   NotificationServer {
     id: notifServer

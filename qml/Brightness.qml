@@ -20,31 +20,28 @@ RowLayout {
         return String.fromCodePoint(0xf00dd) // typo was fromStringPoint
     }
 
-    Process {
-        id: getMax
-        command: ["brightnessctl", "max"]
-        running: true
-        stdout: StdioCollector {
-            onStreamFinished: root.maxBrightness = parseInt(this.text.trim())
-        }
+    // read sysfs directly rather than spawning brightnessctl on every change
+    readonly property string sysfsDir: backlightDevice !== "" ? "/sys/class/backlight/" + backlightDevice : ""
+
+    FileView {
+        id: maxFile
+        path: root.sysfsDir !== "" ? root.sysfsDir + "/max_brightness" : ""
+        onLoaded: root.maxBrightness = parseInt(text().trim())
     }
 
-    Process {
-        id: getCurrent
-        command: ["brightnessctl", "get"]
-        running: true
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.brightness = parseInt(this.text.trim())
-                root.brightnessUpdated()
-            }
+    FileView {
+        id: currentFile
+        path: root.sysfsDir !== "" ? root.sysfsDir + "/brightness" : ""
+        onLoaded: {
+            root.brightness = parseInt(text().trim())
+            root.brightnessUpdated()
         }
     }
 
     Timer {
         id: brightnessRefresh
         interval: 50
-        onTriggered: getCurrent.running = true
+        onTriggered: currentFile.reload()
     }
 
     // detect the real backlight device instead of hardcoding one,
@@ -77,10 +74,7 @@ RowLayout {
     Process {
         id: monitor
         stdout: SplitParser {
-            onRead: (line) => {
-                getCurrent.running = false
-                brightnessRefresh.start()
-            }
+            onRead: (line) => brightnessRefresh.start()
         }
     }
 

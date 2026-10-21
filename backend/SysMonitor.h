@@ -66,6 +66,8 @@ private:
     void readCpu();
     void readMemory();
     void readNet();
+    void setCpuPercent(qreal pct);
+    void setNetRates(qreal rx, qreal tx);
 
     QTimer m_timer;
     QElapsedTimer m_elapsed;
