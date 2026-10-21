@@ -23,8 +23,14 @@ Rectangle {
     property int artistFontWeight: 600
 
     property real mprisProgress: 0
+    // animate the fraction, not the width: the fill stays a pure function of
+    // the current track width and can never lag behind it (same fix as the
+    // dashboard volume/brightness sliders). Short duration keeps it responsive.
+    Behavior on mprisProgress { NumberAnimation { duration: 60; easing.type: Easing.Linear } }
     property string mprisTimePlayed: "0:00"
     property string mprisTimeTotal: "0:00"
+    // invisible extra clickable area above/below the thin progress bar
+    property int barHitSlop: 10
 
     function formatMprisTime(val) {
         let n = Number(val)
@@ -37,7 +43,7 @@ Rectangle {
     // interpolate every second
     Timer {
         id: progressPoller
-        interval: 1000
+        interval: 250
         running: box.dashboard && mprisModule.hasPlayer
         repeat: true
         triggeredOnStart: true
@@ -179,29 +185,35 @@ Rectangle {
                 radius: 8
                 color: "#4d4d4d"
 
-                Behavior on height { NumberAnimation { duration: 380; easing.type: Easing.OutExpo } }
+                Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutExpo } }
 
                 Rectangle {
                     width: parent.width * mediaCard.mprisProgress
                     height: parent.height
                     radius: 5
                     color: barHover.containsMouse ? "#cdcdcd" : fg
-                    Behavior on width { NumberAnimation { duration: 510; easing.type: Easing.Linear } }
                 }
 
+                // same click leeway as the volume/brightness sliders
                 MouseArea {
                     id: barHover
                     anchors.fill: parent
+                    anchors.topMargin: -barHitSlop
+                    anchors.bottomMargin: -barHitSlop
                     hoverEnabled: true
-                    onClicked: (mouse) => {
+                    function seekTo(mouse) {
                         let p = mprisModule.activePlayer
-                        if (!p || !p.length) return
-                        let ratio = mouse.x / width
-                        let len = Number(p.length) || 0
-                        if (len <= 0 && p.metadata && p.metadata["mpris:length"])
-                            len = Number(p.metadata["mpris:length"])
-                        if (len > 0) p.position = ratio * len
+                        let len = mprisModule.polledLength
+                        if (!p || len <= 0) return
+                        let ratio = Math.max(0, Math.min(1, mouse.x / width))
+                        // reflect the seek on the bar immediately instead of
+                        // waiting for the next poll
+                        mediaCard.mprisProgress = ratio
+                        if (p.canSeek && p.positionSupported)
+                            p.position = ratio * len
                     }
+                    onClicked: (mouse) => barHover.seekTo(mouse)
+                    onPositionChanged: (mouse) => { if (pressed) barHover.seekTo(mouse) }
                 }
             }
 

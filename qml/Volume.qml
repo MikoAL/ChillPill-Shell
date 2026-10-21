@@ -71,12 +71,12 @@ RowLayout {
     font.pixelSize: 10 * Config.pillScale
   }
 
-  MouseArea {
-    id: audioMuted
-    anchors.fill: parent
-    cursorShape: Qt.PointingHandCursor
-    onClicked: sink.audio.muted = !sink.audio.muted
-    hoverEnabled: true
+  // handlers, not a MouseArea: a RowLayout would try to lay out a MouseArea.
+  // grab on press so the pill's own click (dashboard) doesn't fire too
+  HoverHandler { cursorShape: Qt.PointingHandCursor }
+  TapHandler {
+    gesturePolicy: TapHandler.ReleaseWithinBounds
+    onTapped: sink.audio.muted = !sink.audio.muted
   }
 
   // percentage

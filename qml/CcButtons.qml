@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Bluetooth
 import IslandBackend
 
 RowLayout {
@@ -15,15 +16,15 @@ RowLayout {
 
   property bool notificationPopup: false
   property bool dashboardOpen: false
-  property bool mediaAutoOpened: false
   property bool wifiPanelOpened: false
+  property bool btPanelOpened: false
   property bool hasPlayer: false
   property real playerHeight: 0
 
   Layout.fillWidth: true
 
   onDashboardOpenChanged: {
-    if (!dashboardOpen) root.wifiPanelOpened = false
+    if (!dashboardOpen) { root.wifiPanelOpened = false; root.btPanelOpened = false }
   }
 
   // wifi
@@ -32,7 +33,7 @@ RowLayout {
     width: root.buttonWidth
     height: root.buttonHeight
     radius: root.buttonRadius
-    visible: root.dashboardOpen && !root.mediaAutoOpened
+    visible: root.dashboardOpen
     color: WifiController.enabled ? "#212529" : (wifiHover.hovered ? Qt.lighter(root.buttonBgOff, 1.5) : root.buttonBgOff)
     border.width: buttonBorderWidth
     border.color: buttonBorderColor
@@ -65,25 +66,28 @@ RowLayout {
       anchors.fill: parent
       acceptedButtons: Qt.LeftButton | Qt.RightButton
       cursorShape: Qt.PointingHandCursor
-      onClicked: (mouse) => {
-        if (mouse.button === Qt.RightButton) {
-          root.wifiPanelOpened = !root.wifiPanelOpened
-          if (root.wifiPanelOpened && WifiController.enabled) WifiController.refreshNetworks(true)
-          return
-        }
-        WifiController.setEnabled(!WifiController.enabled)
+      onClicked: {
+        root.btPanelOpened = false
+        root.wifiPanelOpened = !root.wifiPanelOpened
       }
     }
   }
 
+  // mapToGlobal is not reactive, so the anchor bindings also read the
+  // "opened" flag and layout geometry to be re-evaluated when the panel shows
   WifiPanel {
+    id: wifiPanel
     visible: root.wifiPanelOpened
-    anchorX: wifiBtn.mapToGlobal(0, 0).x - width  // sit left of the wifi button
-    anchorY: wifiBtn.mapToGlobal(0, 0).y
+    onCloseRequested: root.wifiPanelOpened = false
+    anchorX: {  // sit left of the wifi button
+      root.wifiPanelOpened; root.width; wifiBtn.x
+      return wifiBtn.mapToGlobal(0, 0).x - wifiPanel.width
+    }
+    anchorY: 0  // panels hang from the top of the bar, beside the dashboard
   }
 
   onNotificationPopupChanged: {
-    if (root.notificationPopup) root.wifiPanelOpened = false
+    if (root.notificationPopup) { root.wifiPanelOpened = false; root.btPanelOpened = false }
   }
 
   Item { Layout.fillWidth: true }
@@ -94,7 +98,7 @@ RowLayout {
     width: root.buttonWidth
     height: root.buttonHeight
     radius: root.buttonRadius
-    visible: root.dashboardOpen && !root.mediaAutoOpened
+    visible: root.dashboardOpen
     color: notificationModule.dndEnabled ? "#2e2c28" : (dndHover.hovered ? Qt.lighter(root.buttonBgOff, 1.5) : root.buttonBgOff)
     border.width: buttonBorderWidth
     border.color: buttonBorderColor
@@ -119,59 +123,80 @@ RowLayout {
 
   Item { Layout.fillWidth: true }
 
-  // timer / countdown
+  // bluetooth
+  property var btAdapter: Bluetooth.defaultAdapter
+  property bool btEnabled: btAdapter ? btAdapter.enabled : false
+  property var btConnected: []
+
+  function refreshBt() {
+    btConnected = Bluetooth.devices.values.filter(d => d.connected)
+  }
+
+  // watch every device's `connected` so the label reacts to (dis)connects
+  Instantiator {
+    model: Bluetooth.devices
+    delegate: QtObject {
+      required property var modelData
+      property bool connected: modelData.connected
+      onConnectedChanged: root.refreshBt()
+      Component.onCompleted: root.refreshBt()
+      Component.onDestruction: root.refreshBt()
+    }
+  }
+
   Rectangle {
-    id: timerBtn
+    id: btBtn
     width: root.buttonWidth
     height: root.buttonHeight
     radius: root.buttonRadius
-    color: countdownModule.running ? "#25282c" : (timerHover.hovered ? Qt.lighter(root.buttonBgOff, 1.5) : root.buttonBgOff)
+    color: root.btEnabled ? "#212529" : (btHover.hovered ? Qt.lighter(root.buttonBgOff, 1.5) : root.buttonBgOff)
     border.width: buttonBorderWidth
     border.color: buttonBorderColor
-    scale: timerMouse.pressed ? 0.93 : 1.0
+    scale: btMouse.pressed ? 0.93 : 1.0
     Behavior on color { ColorAnimation { duration: 150 } }
     Behavior on scale { NumberAnimation { duration: 80; easing.type: Easing.OutQuad } }
-    property int selectedMinutes: 1
 
     RowLayout {
       anchors.centerIn: parent
       spacing: 5
       Text {
-        text: {
-          if (countdownModule.running) return String.fromCodePoint(0xf1ade)
-          if (countdownModule.remainingSeconds > 0) return String.fromCodePoint(0xf1ae0)
-          return String.fromCodePoint(0xf13ab)
-        }
-        color: countdownModule.running ? "#3978c7" : root.buttonFgOff
+        text: "\uf293" // bluetooth glyph
+        color: root.btEnabled ? "#3f7de0" : root.buttonFgOff
         font { family: Theme.nerdFontFamily; pixelSize: 14 }
       }
       Text {
-        text: countdownModule.running || countdownModule.remainingSeconds > 0
-            ? countdownModule.formatted() : timerBtn.selectedMinutes + "m"
-        color: countdownModule.running ? "#dedede" : root.buttonFgOff
+        text: !root.btAdapter ? "No adapter"
+            : !root.btEnabled ? "Off"
+            : root.btConnected.length === 0 ? "Not connected"
+            : root.btConnected.length === 1 ? root.btConnected[0].name
+            : root.btConnected[0].name + " +" + (root.btConnected.length - 1)
+        color: root.btEnabled ? "#dedede" : root.buttonFgOff
         font { family: Theme.fontFamily; pixelSize: 12; weight: 400 }
+        elide: Text.ElideRight
+        Layout.maximumWidth: 80
       }
     }
 
-    HoverHandler { id: timerHover }
+    HoverHandler { id: btHover }
     MouseArea {
-      id: timerMouse
+      id: btMouse
       anchors.fill: parent
-      acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
       cursorShape: Qt.PointingHandCursor
-      onClicked: (mouse) => {
-        if (mouse.button === Qt.MiddleButton) { countdownModule.reset(); return }
-        if (mouse.button === Qt.RightButton) {
-          if (countdownModule.running || countdownModule.remainingSeconds > 0) return
-          const presets = Config.timerPresets
-          const idx = presets.indexOf(timerBtn.selectedMinutes)
-          timerBtn.selectedMinutes = presets[(idx + 1) % presets.length]
-          return
-        }
-        if (countdownModule.running) { countdownModule.pause(); return }
-        if (countdownModule.remainingSeconds > 0) { countdownModule.resume(); return }
-        countdownModule.start(timerBtn.selectedMinutes)
+      onClicked: {
+        root.wifiPanelOpened = false
+        root.btPanelOpened = !root.btPanelOpened
       }
     }
+  }
+
+  BluetoothPanel {
+    visible: root.btPanelOpened
+    onCloseRequested: root.btPanelOpened = false
+    anchorX: {  // sit right of the bluetooth button
+      root.btPanelOpened; root.width; btBtn.x
+      return btBtn.mapToGlobal(0, 0).x + btBtn.width
+    }
+    anchorY: 0
   }
 }

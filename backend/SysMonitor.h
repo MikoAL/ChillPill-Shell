@@ -20,7 +20,6 @@ class SysMonitor final : public QObject {
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
-    QML_UNCREATABLE("Singleton")
 
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
     Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)

@@ -1302,7 +1302,8 @@ void WifiController::refreshNetworksInternal(bool rescan, bool triggeredBySignal
     });
 
     m_networks.setNetworks(orderedNetworks);
-    if (!triggeredBySignal)
+    // a rescan we just requested stays "scanning" until LastScan changes (or the timeout fires)
+    if (!triggeredBySignal && !rescan)
         setScanningState(false);
     updateStatusText();
 }
@@ -1794,7 +1795,7 @@ bool WifiController::addAndActivateConnection(const QString &ssid, const QString
     connectionSection.insert(QStringLiteral("id"), ssid);
     connectionSection.insert(QStringLiteral("type"), QStringLiteral("802-11-wireless"));
     connectionSection.insert(QStringLiteral("uuid"), QUuid::createUuid().toString(QUuid::WithoutBraces));
-    connectionSection.insert(QStringLiteral("autoconnect"), false);
+    connectionSection.insert(QStringLiteral("autoconnect"), true);
     settings.insert(QStringLiteral("connection"), connectionSection);
 
     QVariantMap wirelessSection;

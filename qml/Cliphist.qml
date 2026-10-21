@@ -173,8 +173,8 @@ Item {
               text: "Clipboard History"
               color: Theme.fg
               font { family: Theme.fontFamily; pixelSize: 11; weight: 700 }
-              anchors.left: parent.left
-              anchors.leftMargin: 4
+              Layout.fillWidth: true
+              Layout.leftMargin: 4
           }
 
           Text {
@@ -184,8 +184,7 @@ Item {
                    + " / " + root.filteredEntries.length + " (" + total + ")"
             color: "#999999"
             font { family: Theme.fontFamily; pixelSize: 9; weight: 300 }
-            anchors.right: parent.right
-            anchors.rightMargin: 6
+            Layout.rightMargin: 6
           }
         }
 

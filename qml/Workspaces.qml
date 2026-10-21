@@ -14,8 +14,10 @@ RowLayout {
       id: wsButton
 
       required property int index
-      property var ws: Hyprland.workspaces.values.find(w => w.id === index + 1)
-      property bool isActive: Hyprland.focusedWorkspace?.id === (index + 1)
+      // Each button is a column of ~/.config/hypr/cross.lua: workspaces 10*col .. 10*col+9
+      property int column: index + 1
+      property var ws: Hyprland.workspaces.values.find(w => Math.floor(w.id / 10) === column)
+      property bool isActive: Math.floor((Hyprland.focusedWorkspace?.id ?? 0) / 10) === column
       property string activeBg: "#4d5258"
       property string inactiveBg: "#393c41"
 
@@ -29,7 +31,7 @@ RowLayout {
 
       Text {
         anchors.centerIn: parent
-        text: wsButton.index + 1
+        text: wsButton.column
         color: wsButton.isActive ? "#ffffff" : "#dae0ea"
         font {
           family: Theme.fontFamily
@@ -44,7 +46,7 @@ RowLayout {
       // "workspace N" syntax errors out. Verified live on 0.55.2.
       MouseArea {
         anchors.fill: parent
-        onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + (wsButton.index + 1 + "})"))
+        onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + (wsButton.column * 10) + " })")
         cursorShape: Qt.PointingHandCursor
       }
     }

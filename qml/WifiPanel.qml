@@ -15,22 +15,32 @@ PanelWindow {
   margins.top: anchorY
   margins.left: anchorX
 
+  signal closeRequested()  // Esc: the panel owns keyboard focus while open
+
   property bool controlCenter: false
   property string passwordPromptSsid: ""
   property bool passwordPromptVisible: false
   property string passwordValue: ""
 
-  // keyboard focus for password prompt
-  WlrLayershell.keyboardFocus: passwordPromptVisible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+  // Hyprland confines pointer input to exclusive layer surfaces while one exists
+  // (the bar is exclusive whenever the dashboard is open), so the panel must be
+  // exclusive too or it never receives the mouse. Also gives the password prompt focus.
+  WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
   exclusionMode: ExclusionMode.Ignore
-  width: 270
+  width: 300
   height: 360
   color: "transparent"
 
   // auto hide if control center close
   onVisibleChanged: {
     if (visible && WifiController.enabled) WifiController.refreshNetworks(true)
+  }
+
+  Item {
+    anchors.fill: parent
+    focus: !wifiListWindow.passwordPromptVisible
+    Keys.onEscapePressed: wifiListWindow.closeRequested()
   }
 
   Rectangle {
@@ -45,18 +55,12 @@ PanelWindow {
       anchors.margins: 16
       spacing: 13
 
-      Text {
-        text: "Wi-Fi"
-        color: "#d2d2d2"
-        font { family: Theme.fontFamily; pixelSize: 14; bold: true }
-        Layout.leftMargin: 5
-      }
-
-      Text {
-        visible: WifiController.scanning
-        text: "Scanning..."
-        color: "#949494"
-        font { family: Theme.fontFamily; pixelSize: 11 }
+      PanelHeader {
+        title: "Wi-Fi"
+        active: WifiController.enabled
+        scanning: WifiController.scanning
+        onScanClicked: WifiController.refreshNetworks(true)
+        onToggleClicked: WifiController.setEnabled(!WifiController.enabled)
       }
 
       Text {
@@ -200,6 +204,7 @@ PanelWindow {
             verticalAlignment: TextInput.AlignVCenter
             onTextChanged: wifiListWindow.passwordValue = text
             Keys.onReturnPressed: submitBtn.clicked()
+            Keys.onEscapePressed: cancelBtnMA.clicked(null)
           }
         }
 

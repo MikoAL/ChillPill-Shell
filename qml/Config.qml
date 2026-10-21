@@ -13,14 +13,13 @@ Singleton {
     // fallback values
     JsonAdapter {
       id: adapter
-      property string displayPicture: Quickshell.env("HOME") + "/.pfp.png"
+      property string displayPicture: "~/.pfp.png"
       property string clockFormat: "MMM d  HH:mm:ss"
       property int pillTopMargin: 9
       property int pillBottomMargin: 26
       property string textFontFamily: "Monocraft"
       property string nerdFontFamily: "JetBrainsMono Nerd Font Propo"
       property list<int> timerPresets: [1, 5, 10, 15, 30]
-      property int mediaAutoOpenDuration: 3000
       property int maxWorkspaces: 5
       property int notificationDisplayTime: 3000
       property int maxNotificationsInStack: 20
@@ -31,6 +30,7 @@ Singleton {
       property string weatherLocation: "Delhi"
       property int weatherRefreshInterval: 3600000
       property bool avoidDuplicateNotifications: true
+      property bool notificationSound: true
       property string defaultTerminal: "kitty"
       property real pillScale: 1.0
       property int sysMonitorInterval: 2000
@@ -55,14 +55,16 @@ Singleton {
     return Math.round(v) + units[u]
   }
 
-  readonly property alias displayPicture: adapter.displayPicture
+  // "~/" expands to $HOME so the shipped config works for any user
+  readonly property string displayPicture: adapter.displayPicture.startsWith("~/")
+      ? Quickshell.env("HOME") + adapter.displayPicture.slice(1)
+      : adapter.displayPicture
   readonly property alias clockFormat: adapter.clockFormat
   readonly property alias pillTopMargin: adapter.pillTopMargin
   readonly property alias pillBottomMargin: adapter.pillBottomMargin
   readonly property alias textFontFamily: adapter.textFontFamily
   readonly property alias nerdFontFamily: adapter.nerdFontFamily
   readonly property alias timerPresets: adapter.timerPresets
-  readonly property alias mediaAutoOpenDuration: adapter.mediaAutoOpenDuration
   readonly property alias maxWorkspaces: adapter.maxWorkspaces
   readonly property alias notificationDisplayTime: adapter.notificationDisplayTime
   readonly property alias maxNotificationsInStack: adapter.maxNotificationsInStack
@@ -73,6 +75,7 @@ Singleton {
   readonly property alias weatherLocation: adapter.weatherLocation
   readonly property alias weatherRefreshInterval: adapter.weatherRefreshInterval
   readonly property alias avoidDuplicateNotifications: adapter.avoidDuplicateNotifications
+  readonly property alias notificationSound: adapter.notificationSound
   readonly property alias defaultTerminal: adapter.defaultTerminal
   readonly property alias pillScale: adapter.pillScale
   readonly property alias sysMonitorInterval: adapter.sysMonitorInterval

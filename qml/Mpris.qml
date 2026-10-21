@@ -6,16 +6,6 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    signal nowPlaying()
-
-    property bool _wasPlaying: false
-
-    onPlayingChanged: {
-        if (playing && !_wasPlaying)
-            nowPlaying()
-        _wasPlaying = playing
-    }
-
     property var playersList: Mpris.players.values !== undefined ? Mpris.players.values : Mpris.players
     property var activePlayer: resolveActivePlayer()
     property string lastActivePlayerDbusName: ""
@@ -38,21 +28,60 @@ Item {
 
     property real polledPosition: 0
     property real polledLength: 0
+    property real lastPollTime: 0
+    property string lastTrackKey: ""
+    property real lengthCache: 0
     readonly property real progress: polledLength > 0 ? polledPosition / polledLength : 0
 
     function pollProgress() {
         if (!activePlayer) {
             polledPosition = 0
             polledLength = 0
+            lastPollTime = 0
+            lastTrackKey = ""
+            lengthCache = 0
             return
         }
-        polledPosition = Number(activePlayer.position) || 0
-        polledLength = Number(activePlayer.length) || 0
+        const now = Date.now()
+        const delta = lastPollTime > 0 ? (now - lastPollTime) / 1000 : 0
+        lastPollTime = now
+
+        // restart the local position estimate whenever the track changes
+        const trackKey = (activePlayer.trackTitle || "") + "\u0000" + (activePlayer.trackArtUrl || "")
+        if (trackKey !== lastTrackKey) {
+            lastTrackKey = trackKey
+            polledPosition = 0
+            lengthCache = 0
+        }
+
+        // length in seconds. Firefox drops mpris:length from its metadata when
+        // you seek (both SetPosition and Seek trigger it), which makes
+        // Quickshell report length == position and collapses the bar to full.
+        // Only trust the reported length while the player says it's supported;
+        // otherwise keep the last good value for this track.
+        let len = 0
+        if (activePlayer.lengthSupported) {
+            len = Number(activePlayer.length) || 0
+        } else if (activePlayer.metadata) {
+            const metaLen = Number(activePlayer.metadata["mpris:length"]) || 0
+            if (metaLen > 0) len = metaLen / 1000000
+        }
+        if (len <= 0) len = lengthCache
+        if (len > 0) lengthCache = len
+        polledLength = len
+
+        if (activePlayer.positionSupported) {
+            polledPosition = Number(activePlayer.position) || 0
+        } else if (root.playing && len > 0) {
+            // browser tabs etc. don't expose the Position property: keep a
+            // local wall-clock estimate so the bar and time left still advance
+            if (delta > 0) polledPosition += delta
+        }
     }
 
     Timer {
         id: positionTimer
-        interval: 500
+        interval: 250
         running: root.hasPlayer
         repeat: true
         triggeredOnStart: true

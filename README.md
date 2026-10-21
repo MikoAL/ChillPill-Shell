@@ -39,10 +39,6 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
   </tr>
   <tr>
     <td width="50%">
-      <p align="center"><b>Media player auto-open on media playing</b></p>
-      <img src="screenshots/image_3.webp" width="100%" alt="Media player auto open" />
-    </td>
-    <td width="50%">
       <p align="center"><b>Notification popup (nusgmon-alert)</b></p>
       <img src="screenshots/image_4.webp" width="100%" alt="Notification popup of nusgmon-alert.sh" />
     </td>
@@ -81,7 +77,7 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 ### Features
 
 - Main Pill Bar                : Battery, volume, workspaces, network, clock
-- Control Center               : Media Player, Buttons (WiFi, Silent Notifications, Timer), Volume and Brightness Sliders, Notifications Stack
+- Control Center               : Media Player, Buttons (WiFi, Silent Notifications, Bluetooth), Volume and Brightness Sliders, Notifications Stack
 - Cliphist (Clipboard History) : Search, Clipboard images preview, Item index status, `Delete` key to delete any item
 - Mini Dashboard               : Profile Image, Username, Hostname, Uptime, Battery, Basic network info, Today bandwidth usage, Datetime, Weather, Calendar, Power buttons (lock, sleep, shutdown, reboot)
 - DBus Notification            : App icon (optional), summary, body (YES! you can ditch swaync/dunst fully now)
@@ -94,8 +90,8 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 - Main pill bar width expands on hover
 - Audio (to mute/unmute) and workspaces (to switch) in the main pill bar are clickable.
 - Control center's media player progress bar is not only for status, it's usable to control the media you playing.
-- Control center has WiFi controller which has list of active networks and has password prompt. also timer minutes can be change by right
-  click.
+- Control center's WiFi and Bluetooth buttons open a panel (left or right click) with a scan button and an on/off switch. WiFi lists
+  networks with a password prompt; Bluetooth lists devices and pairs/connects on click.
 - Cliphist shows image previews from `~/.cache/quickshell/cliphist-imgs` by converting image binaries into real images and save there.
 - Notifications are able to show in slide animation (like iOS mute) while you playing video game or watching movie in full screen.
   also it can show custom app icon to show in notification, else it shows bell icon.
@@ -108,7 +104,7 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 
 | Option | Description | Default |
 |---|---|---|
-| `displayPicture` | Profile image path for mini dashboard | `/home/<user>/.pfp.png` |
+| `displayPicture` | Profile image path for mini dashboard (`~/` expands to your home) | `~/.pfp.png` |
 | `clockFormat` | Clock format for the pill bar | `MMM d  HH:mm:ss` |
 | `pillTopMargin` | Top spacing of pill bar | `9` |
 | `pillBottomMargin` | Bottom spacing of pill bar | `26` |
@@ -116,11 +112,11 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 | `textFontFamily` | Font family for general text | `Monocraft` |
 | `nerdFontFamily` | Font family for icons (Nerd Fonts) | `JetBrainsMono Nerd Font Propo` |
 | `timerPresets` | Timer minute presets | `[1, 5, 10, 15, 30]` |
-| `mediaAutoOpenDuration` | Media-playing popup duration (ms) | `2000` |
 | `maxWorkspaces` | Max workspaces shown in pill bar | `5` |
 | `notificationDisplayTime` | Notification popup duration (ms) | `3000` |
 | `maxNotificationsInStack` | Max notifications shown in stack | `20` |
 | `avoidDuplicateNotifications` | Skip appending duplicate notifications to stack | `true` |
+| `notificationSound` | Play a sound when a notification arrives | `true` |
 | `bandwidthRefreshInterval` | Bandwidth usage refresh interval (ms) | `300000` (5 min) |
 | `screenLockAppCommand` | Screen lock command for mini dashboard's lock button | `hyprlock` |
 | `osdDuration` | OSD (on-screen display) duration (ms) | `800` |
@@ -140,14 +136,13 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
 
 ```jsonc
 {
-  "displayPicture": "/home/<user>/.pfp.png",
+  "displayPicture": "~/.pfp.png",
   "clockFormat": "MMM d  HH:mm:ss",
   "pillTopMargin": 9,
   "pillBottomMargin": 26,
   "textFontFamily": "Monocraft",
   "nerdFontFamily": "JetBrainsMono Nerd Font Propo",
   "timerPresets": [1, 5, 10, 15, 30],
-  "mediaAutoOpenDuration": 2000,
   "maxWorkspaces": 5,
   "notificationDisplayTime": 3000,
   "maxNotificationsInStack": 20,
@@ -158,6 +153,7 @@ A Lightweight and Feature-Rich dynamic pill shape bar made in Quickshell especia
   "weatherUnits": "metric",
   "weatherRefreshInterval": 3600000,
   "avoidDuplicateNotifications": true,
+  "notificationSound": true,
   "defaultTerminal": "kitty",
   "pillScale": 1.0,
   "sysMonitorInterval": 2000,
@@ -248,6 +244,15 @@ Keybindings are recommended for ChillPill-Shell in your Hyprland, Just paste thi
 hl.bind(mainMod .. " + CTRL + C",  hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call dashboard toggle"))
 hl.bind(mainMod .. " + CTRL + V",  hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call cliphist toggle"))
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("qs ipc -p /usr/share/chillpill-shell call appLauncher toggle"))
+```
+
+To keep automated brightness changes (e.g. hypridle dimming) from showing the OSD,
+call `brightness quiet` right before them:
+
+```ini
+# hypridle.conf
+on-timeout = qs ipc -p /usr/share/chillpill-shell call brightness quiet; brightnessctl -s set 10%
+on-resume  = qs ipc -p /usr/share/chillpill-shell call brightness quiet; brightnessctl -r
 ```
 
 The control center and mini dashboard were merged into a single **dashboard** panel

@@ -212,7 +212,8 @@ Item {
                         Layout.preferredHeight: 26
                         Layout.alignment: Qt.AlignVCenter
                         source: Quickshell.iconPath(modelData.icon, true)
-                        asynchronous: true
+                        // image://icon is a QPixmap provider; loading it off the GUI thread crashes in QIcon
+                        asynchronous: false
                         scale: index === root.selectedIndex ? 1.10 : (rowHover.hovered ? 1.10 : 1)
                         Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.OutExpo } }
                     }

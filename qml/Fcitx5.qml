@@ -97,11 +97,12 @@ RowLayout {
     }
   }
 
-  MouseArea {
-    anchors.fill: parent
-    cursorShape: Qt.PointingHandCursor
-    hoverEnabled: true
-    onClicked: {
+  // handlers, not a MouseArea: a RowLayout would try to lay out a MouseArea.
+  // grab on press so the pill's own click (dashboard) doesn't fire too
+  HoverHandler { cursorShape: Qt.PointingHandCursor }
+  TapHandler {
+    gesturePolicy: TapHandler.ReleaseWithinBounds
+    onTapped: {
       // cycle between the IMs of the default group
       imSet.command = ["fcitx5-remote", "-s", root.chewing ? "keyboard-us" : "chewing"]
       imSet.running = false

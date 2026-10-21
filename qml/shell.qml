@@ -14,16 +14,16 @@ ShellRoot {
 
   IpcHandler {
       target: "cliphist"
-      function toggle(): void { box.dashboard = false; box.cliphistOpen = !box.cliphistOpen; box.appLauncher = false }
-      function show(): void { box.dashboard = false; box.cliphistOpen = true }
+      function toggle(): void { if (box.hidden) return; box.dashboard = false; box.cliphistOpen = !box.cliphistOpen; box.appLauncher = false }
+      function show(): void { if (box.hidden) return; box.dashboard = false; box.cliphistOpen = true }
       function hide(): void { box.cliphistOpen = false }
   }
 
   // merged control center + mini dashboard
   IpcHandler {
       target: "dashboard"
-      function toggle(): void { box.dashboard = !box.dashboard; box.cliphistOpen = false; box.appLauncher = false }
-      function show(): void { box.dashboard = true; box.cliphistOpen = false; box.appLauncher = false }
+      function toggle(): void { if (box.hidden) return; box.dashboard = !box.dashboard; box.cliphistOpen = false; box.appLauncher = false }
+      function show(): void { if (box.hidden) return; box.dashboard = true; box.cliphistOpen = false; box.appLauncher = false }
       function hide(): void { box.dashboard = false }
   }
 
@@ -31,23 +31,30 @@ ShellRoot {
   // forward to the merged dashboard (see README for replacement bindings)
   IpcHandler {
       target: "controlCenter"
-      function toggle(): void { box.dashboard = !box.dashboard; box.cliphistOpen = false; box.appLauncher = false }
-      function show(): void { box.dashboard = true; box.cliphistOpen = false; box.appLauncher = false }
+      function toggle(): void { if (box.hidden) return; box.dashboard = !box.dashboard; box.cliphistOpen = false; box.appLauncher = false }
+      function show(): void { if (box.hidden) return; box.dashboard = true; box.cliphistOpen = false; box.appLauncher = false }
       function hide(): void { box.dashboard = false }
   }
 
   IpcHandler {
       target: "miniDashboard"
-      function toggle(): void { box.dashboard = !box.dashboard; box.cliphistOpen = false; box.appLauncher = false }
-      function show(): void { box.dashboard = true; box.cliphistOpen = false; box.appLauncher = false }
+      function toggle(): void { if (box.hidden) return; box.dashboard = !box.dashboard; box.cliphistOpen = false; box.appLauncher = false }
+      function show(): void { if (box.hidden) return; box.dashboard = true; box.cliphistOpen = false; box.appLauncher = false }
       function hide(): void { box.dashboard = false }
   }
 
   IpcHandler {
     target: "appLauncher"
-    function toggle(): void { box.dashboard = false; box.cliphistOpen = false; box.appLauncher = !box.appLauncher }
-    function show(): void { box.dashboard = false; box.cliphistOpen = false; box.appLauncher = true }
+    function toggle(): void { if (box.hidden) return; box.dashboard = false; box.cliphistOpen = false; box.appLauncher = !box.appLauncher }
+    function show(): void { if (box.hidden) return; box.dashboard = false; box.cliphistOpen = false; box.appLauncher = true }
     function hide(): void { box.appLauncher = false }
+  }
+
+  // call right before an automated brightness change (e.g. hypridle dim /
+  // restore) so the sysfs write it causes doesn't pop the OSD
+  IpcHandler {
+    target: "brightness"
+    function quiet(): void { brightnessQuietTimer.restart() }
   }
 
   property string bg: Theme.bg
@@ -73,14 +80,15 @@ ShellRoot {
 
   readonly property int notifMaxHeight: 97
 
-  // media player related
-  property bool mediaAutoOpened: false
-
   PanelWindow {
 
     WlrLayershell.layer: WlrLayershell.Top
-    WlrLayershell.keyboardFocus: (box.cliphistOpen || box.appLauncher) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    implicitHeight: 482
+    WlrLayershell.keyboardFocus: (box.cliphistOpen || box.appLauncher || box.dashboard) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // tall enough for the popups (calendar / weather) that hang below the
+    // pill, and grows with the pill when a full dashboard (media player +
+    // notification stack) pushes it past that; otherwise the compositor
+    // clips the bottom of the box
+    implicitHeight: Math.max(482, Math.ceil(box.height) + 8)
 
     anchors {
       top: true
@@ -123,9 +131,73 @@ ShellRoot {
       id: box
       anchors.top: parent.top
       anchors.horizontalCenter: parent.horizontalCenter
-      opacity: (!fullscreenActive && !notifFullscreenMode) ? 1 : 0
-      visible: opacity > 0
       clip: true
+
+      // fullscreen hide/show, choreographed like the Dynamic Island: the
+      // contents fade first, the pill morphs into a compact capsule, then the
+      // capsule sinks up into the top edge. Coming back runs in reverse with a
+      // spring: capsule drops in, unfurls with a slight overshoot, contents
+      // fade in last. Three scalars drive it so each stage keeps its own
+      // timing independent of the regular width/height Behaviors.
+      readonly property bool hidden: fullscreenActive || notifFullscreenMode
+
+      // the pill always leaves as a plain bar: drop any open panel so the
+      // morph starts from a capsule, the panel isn't left open (and stealing
+      // exclusive keyboard focus) behind the fullscreen window, and the pill
+      // comes back as a bar rather than straight into the panel. The IPC
+      // handlers also ignore open requests while hidden.
+      onHiddenChanged: {
+        if (hidden) {
+          dashboard = false
+          cliphistOpen = false
+          appLauncher = false
+        }
+      }
+
+      // 0 = full bar width, 1 = compact capsule
+      property real collapse: hidden ? 1 : 0
+      Behavior on collapse {
+        SequentialAnimation {
+          PauseAnimation { duration: box.hidden ? 0 : 110 }
+          NumberAnimation {
+            duration: box.hidden ? 320 : 460
+            easing.type: box.hidden ? Easing.InOutQuart : Easing.OutBack
+            easing.overshoot: 1.15
+          }
+        }
+      }
+
+      // 1 = resting on screen, 0 = swallowed by the top edge
+      property real reveal: hidden ? 0 : 1
+      Behavior on reveal {
+        SequentialAnimation {
+          PauseAnimation { duration: box.hidden ? 190 : 0 }
+          NumberAnimation {
+            duration: box.hidden ? 230 : 380
+            easing.type: box.hidden ? Easing.InCubic : Easing.OutBack
+            easing.overshoot: 1.0
+          }
+        }
+      }
+
+      // 1 = bar modules visible, 0 = faded (see barContent.opacity)
+      property real contentReveal: hidden ? 0 : 1
+      Behavior on contentReveal {
+        SequentialAnimation {
+          PauseAnimation { duration: box.hidden ? 0 : 300 }
+          NumberAnimation { duration: box.hidden ? 90 : 220; easing.type: Easing.OutCubic }
+        }
+      }
+
+      // compact capsule the bar shrinks to before it leaves (island proportions)
+      readonly property real collapsedWidth: barHeight * 3.2
+
+      width: implicitWidth * (1 - collapse) + collapsedWidth * collapse
+      opacity: Math.min(1, reveal)
+      visible: opacity > 0
+      scale: 0.7 + 0.3 * reveal
+      transformOrigin: Item.Top
+      anchors.topMargin: -(1 - reveal) * (height * 0.5 + Config.pillTopMargin)
 
       property bool appLauncher: false
       property bool hovered: false
@@ -157,7 +229,7 @@ ShellRoot {
       }
 
       onChargingChanged: {
-        if (!box.dashboard) box.activeOsd = "battery"
+        if (!box.dashboard && box.ready) box.activeOsd = "battery"
         osdHideTimer.interval = Config.osdDuration
         osdHideTimer.restart()
         console.log("charging:", box.charging, "level:", box.batteryLevel)
@@ -190,11 +262,23 @@ ShellRoot {
         onTriggered: box.activeOsd = ""
       }
       Timer { id: brightnessThrottle; interval: 80; repeat: false }
+      // while running, brightness changes update the value but skip the OSD
+      // (covers inotify -> 50ms refresh -> brightnessctl get round-trip)
+      Timer { id: brightnessQuietTimer; interval: 1000; repeat: false }
+
+      // suppress the volume/brightness/battery OSDs that otherwise flash once
+      // right after launch, when the modules do their initial reads
+      property bool ready: false
+      Timer {
+        interval: 2000
+        running: true
+        onTriggered: box.ready = true
+      }
 
       onImplicitHeightChanged: {
           heightAnim.stop()
           heightAnim.to = implicitHeight
-          heightAnim.duration = mediaAutoOpened ? 650 : 550
+          heightAnim.duration = 550
           heightAnim.start()
       }
 
@@ -205,11 +289,13 @@ ShellRoot {
         + centerGroup.implicitWidth
         + 2 * Config.zoneGap * Config.paddingScale
 
+      readonly property real barHeight:
+          (Math.max(leftGroup.implicitHeight, centerGroup.implicitHeight, rightGroup.implicitHeight) * Config.pillScale) + 10
+
       // adjust box shape conditionally
       implicitWidth: box.activeOsd === "battery" ? osdWidth
                      : box.activeOsd === "timer" ? osdWidth
                      : (notificationModule.active && !notifFullscreenMode) ? 305
-                     : dashboard && mediaAutoOpened ? 380
                      : dashboard ? 430
                      : activeOsd === "volume" ? osdWidth
                      : box.activeOsd === "brightness" ? osdWidth
@@ -219,18 +305,21 @@ ShellRoot {
                        + 2 * Config.pillSidePadding * Config.paddingScale
                        + (12 * Config.paddingScale) + (hovered ? 68 : 56) * Config.paddingScale
 
-      implicitHeight: activeOsd === "battery" ? osdHeight
+      // while hidden the pill always leaves as a plain bar, even if a panel
+      // was open, so the collapse morph starts from a capsule
+      implicitHeight: hidden ? barHeight
+                  : activeOsd === "battery" ? osdHeight
                   : activeOsd === "timer" ? osdHeight
                   : (notificationModule.active && !notifFullscreenMode) ? 52
-                  : dashboard && mediaAutoOpened ? 170
                   : dashboard ? (dashboardColumn.implicitHeight + 49)
                   : activeOsd === "volume" ? osdHeight
                   : activeOsd === "brightness" ? osdHeight
                   : cliphistOpen ? 270
                   : appLauncher ? 400
-                  : (Math.max(leftGroup.implicitHeight, centerGroup.implicitHeight, rightGroup.implicitHeight) * Config.pillScale) + 10
+                  : barHeight
 
-      radius: notificationModule.active ? 99
+      radius: hidden ? 20 * Config.pillScale
+        : notificationModule.active ? 99
         : cliphistOpen ? 28
         : dashboard && mprisModule.hasPlayer ? 23
         : dashboard && (notificationModule.notifications.length > 0) ? 25
@@ -244,7 +333,9 @@ ShellRoot {
       color: dashboard && mprisModule.hasPlayer ? "#1a1a1a" : bg
 
       onDashboardChanged: {
-        if (!dashboard) {
+        if (dashboard) {
+          dashboardPanel.forceActiveFocus()
+        } else {
           calendarPopup.shown = false
           if (weatherPopupLoader.item) weatherPopupLoader.item.shown = false
         }
@@ -252,6 +343,13 @@ ShellRoot {
 
       Behavior on implicitWidth { NumberAnimation { duration: 225; easing.type: Easing.OutExpo } }
       NumberAnimation { id: heightAnim; target: box; property: "height"; easing.type: Easing.OutExpo }
+
+      // hovering a toast holds it on screen
+      Binding {
+        target: notificationModule
+        property: "pillHovered"
+        value: box.hovered && notificationModule.active && !notifFullscreenMode
+      }
 
       MouseArea {
         anchors.fill: parent
@@ -262,6 +360,16 @@ ShellRoot {
         onExited: box.hovered = false
 
         onClicked: (mouse) => {
+
+          // clicking a toast opens the app that sent it, middle/right
+          // click just puts it away (it stays in the dashboard list)
+          if (notificationModule.active && !notifFullscreenMode && box.activeOsd === "") {
+            if (mouse.button === Qt.LeftButton)
+              notificationModule.activate(notificationModule.current)
+            else
+              notificationModule.hideToast()
+            return
+          }
 
           // dashboard closes on a left click on empty pill space
           if (box.dashboard) {
@@ -281,14 +389,11 @@ ShellRoot {
           if (mouse.button === Qt.LeftButton) {
             console.log("Left click detected, opening dashboard")
             box.dashboard = !box.dashboard
-            mediaAutoOpened = false
             box.appLauncher = false
-            mediaPopupHideTimer.stop()
           }
 
           if (mouse.button === Qt.MiddleButton) {
             console.log("Middle click detected, opening cliphist")
-            mediaAutoOpened = false
             box.appLauncher = false
             box.cliphistOpen = !box.cliphistOpen
           }
@@ -301,7 +406,8 @@ ShellRoot {
           id: brightnessModule
           visible: false
           onBrightnessUpdated: {
-              if (!box.dashboard) box.activeOsd = "brightness"
+              if (brightnessQuietTimer.running) return
+              if (!box.dashboard && box.ready) box.activeOsd = "brightness"
               osdHideTimer.interval = Config.osdDuration
               osdHideTimer.restart()
           }
@@ -318,10 +424,12 @@ ShellRoot {
                  && !notificationModule.active
                  && !box.dashboard
                  && box.activeOsd === ""
-                 && !box.appLauncher ? 1 : 0
+                 && !box.appLauncher ? box.contentReveal : 0
         visible: opacity > 0
 
-        Behavior on opacity { NumberAnimation { duration: 100 } }
+        // the fullscreen fade is paced by contentReveal itself; only smooth
+        // the regular panel/osd hand-offs
+        Behavior on opacity { enabled: box.contentReveal === 1; NumberAnimation { duration: 100 } }
 
         RowLayout {
           id: leftGroup
@@ -357,11 +465,13 @@ ShellRoot {
           Volume {
             id: volumeModule
             onVolumeChanged: {
-              if (!box.dashboard) box.activeOsd = "volume"
+              if (!box.dashboard && box.ready) box.activeOsd = "volume"
               osdHideTimer.interval = Config.osdDuration
               osdHideTimer.restart()
               }
           }
+          BatteryRate {}
+          BatteryEnergy {}
           Battery {}
         }
       }
@@ -480,6 +590,8 @@ ShellRoot {
         visible: opacity > 0
         height: box.dashboard && box.activeOsd === "" ? box.implicitHeight - 25 : 0
 
+        Keys.onEscapePressed: box.dashboard = false
+
         Behavior on opacity {
           SequentialAnimation {
             PauseAnimation { duration: box.dashboard ? 15 : 0 }
@@ -496,7 +608,6 @@ ShellRoot {
           // ---- profile row: avatar, user@host, uptime, battery ----
           RowLayout {
             Layout.fillWidth: true
-            visible: !mediaAutoOpened
             spacing: 10
 
             // username
@@ -551,10 +662,24 @@ ShellRoot {
               Image {
                 id: avatarImg
                 anchors.fill: parent
-                source: "file://" + Config.displayPicture
+                source: Config.displayPicture !== "" ? "file://" + Config.displayPicture : ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: false
                 sourceSize: Qt.size(avatarSize, avatarSize)
+              }
+
+              // placeholder when the picture is unset or missing
+              Rectangle {
+                anchors.fill: parent
+                color: "#2a2a2a"
+                visible: avatarImg.status !== Image.Ready
+
+                Text {
+                  anchors.centerIn: parent
+                  text: String.fromCodePoint(0xf007)
+                  color: "#8a8a8a"
+                  font { family: Theme.nerdFontFamily; pixelSize: avatarSize * 0.45 }
+                }
               }
             }
 
@@ -600,7 +725,6 @@ ShellRoot {
           // ---- system row: ip + daily bandwidth ----
           RowLayout {
             Layout.fillWidth: true
-            visible: !mediaAutoOpened
 
             IpStatus { Layout.alignment: Qt.AlignVCenter }
             Item { Layout.fillWidth: true }
@@ -611,16 +735,16 @@ ShellRoot {
           MediaPlayer {
             Layout.fillWidth: true
             Layout.preferredHeight: mprisModule.hasPlayer ? 118 : 0
-            margin: box.dashboard && mediaAutoOpened ? 5 : 12
+            margin: 12
             artistFontSize: 10
-            artistFontWeight: box.dashboard && mediaAutoOpened ? 500 : 300
-            artistFontColor: box.dashboard && mediaAutoOpened ? "#9b9b9b" : "#7b7b7b"
-            color: box.dashboard && mediaAutoOpened ? "#1a1a1a" : "#151515"
-            radius: box.dashboard && mprisModule.hasPlayer ? 16 : 25
-            border.width: box.dashboard && mediaAutoOpened ? 0 : 1
+            artistFontWeight: 300
+            artistFontColor: "#7b7b7b"
+            color: "#151515"
+            radius: mprisModule.hasPlayer ? 16 : 25
+            border.width: 1
           }
 
-          // ---- quick controls: wifi / dnd / timer ----
+          // ---- quick controls: wifi / dnd / bluetooth ----
           CcButtons {
             Layout.fillWidth: true
             buttonBorderColor: box.ccButtonBorderColor
@@ -631,7 +755,6 @@ ShellRoot {
             buttonBgOff: box.dashboard && !mprisModule.hasPlayer ? "#222222" : box.ccButtonBgOff
             buttonFgOff: box.dashboard && !mprisModule.hasPlayer ? "#999999" : box.ccButtonFgOff
             dashboardOpen: box.dashboard
-            mediaAutoOpened: mediaAutoOpened
             notificationPopup: notificationModule.active
           }
 
@@ -640,7 +763,6 @@ ShellRoot {
             id: sliderColumn
             Layout.fillWidth: true
             spacing: 5
-            visible: !mediaAutoOpened
 
             // volume
             RowLayout {
@@ -767,7 +889,7 @@ ShellRoot {
             id: headerBar
             Layout.fillWidth: true
             Layout.preferredHeight: 35
-            visible: notificationModule.notifications.length > 0 && box.dashboard && !mediaAutoOpened
+            visible: notificationModule.notifications.length > 0 && box.dashboard
             topLeftRadius: 13
             topRightRadius: 13
             bottomLeftRadius: 0
@@ -823,7 +945,7 @@ ShellRoot {
             bottomLeftRadius: 13
             bottomRightRadius: 13
             color: "#161616"
-            visible: notificationModule.notifications.length > 0 && box.dashboard && !mediaAutoOpened
+            visible: notificationModule.notifications.length > 0 && box.dashboard
             clip: true
             border.width: 1
             border.color: "#2f2f2f"
@@ -839,7 +961,8 @@ ShellRoot {
               anchors.topMargin: 5
               anchors.leftMargin: 5
               anchors.rightMargin: 5
-              height: Math.min(contentHeight, notifMaxHeight)
+              // stay inside the box's padding so the last row isn't clipped
+              height: Math.min(contentHeight, parent.height - anchors.topMargin - 2)
               spacing: 6
               model: notificationModule.notificationsReversed
               clip: true
@@ -873,8 +996,21 @@ ShellRoot {
               // add/append notifications in the stack
               delegate: Item {
                 id: notifDelegate
+                // the action Repeater below shadows modelData
+                readonly property var entry: modelData
                 width: ListView.view.width
                 height: contentColumn.implicitHeight + 7
+
+                // click the entry to open its app; declared first so the
+                // close button stays on top of it
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    box.dashboard = false
+                    notificationModule.activate(modelData._id)
+                  }
+                }
 
                 // glyph (nerd font) bell icon
                 Text {
@@ -895,7 +1031,8 @@ ShellRoot {
                   width: 22
                   height: 22
                   fillMode: Image.PreserveAspectFit
-                  asynchronous: true
+                  // image://icon must load on the GUI thread (QIcon isn't thread-safe)
+                  asynchronous: !String(source).startsWith("image://icon/")
                   source: {
                     if (modelData.image) return modelData.image
                     if (modelData.appIcon) {
@@ -982,6 +1119,45 @@ ShellRoot {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 2
                     visible: text !== ""
+                  }
+
+                  // app-provided actions ("Mark as read", "Reply", ...)
+                  Flow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 3
+                    Layout.bottomMargin: 2
+                    spacing: 5
+                    visible: actionRepeater.count > 0
+
+                    Repeater {
+                      id: actionRepeater
+                      model: notificationModule.buttonActions(notifDelegate.entry)
+
+                      Rectangle {
+                        required property var modelData
+                        implicitWidth: actionLabel.implicitWidth + 16
+                        implicitHeight: 18
+                        radius: 99
+                        color: actionHover.containsMouse ? "#3a3a3a" : "#2a2a2a"
+                        Behavior on color { ColorAnimation { duration: 100 } }
+
+                        Text {
+                          id: actionLabel
+                          anchors.centerIn: parent
+                          text: modelData.text
+                          color: Theme.fg
+                          font { family: Theme.fontFamily; pixelSize: 8; weight: 600 }
+                        }
+
+                        MouseArea {
+                          id: actionHover
+                          anchors.fill: parent
+                          hoverEnabled: true
+                          cursorShape: Qt.PointingHandCursor
+                          onClicked: notificationModule.invokeAction(notifDelegate.entry._id, modelData.identifier)
+                        }
+                      }
+                    }
                   }
 
                   Item {
@@ -1172,28 +1348,6 @@ ShellRoot {
     }
 
     Connections {
-        target: mprisModule
-        function onNowPlaying() {
-          if (box.cliphistOpen || box.dashboard) return
-          if (!box.dashboard) mediaAutoOpened = true
-          box.dashboard = true
-          mediaPopupHideTimer.restart()
-        }
-    }
-
-    Timer {
-        id: mediaPopupHideTimer
-        interval: Config.mediaAutoOpenDuration
-        repeat: false
-        onTriggered: {
-          if (mediaAutoOpened) {
-            box.dashboard = false
-            mediaAutoOpened = false
-          }
-        }
-    }
-
-    Connections {
       target: countdownModule
       function onTimerFinished() {
         if (!box.dashboard) box.activeOsd = "timer"
@@ -1216,6 +1370,8 @@ ShellRoot {
   NotificationServer {
     id: notifServer
     keepOnReload: false
+    // without this apps (Discord/Electron) don't send their click action
+    actionsSupported: true
     onNotification: notif => {
       notif.tracked = true
       notificationModule.enqueue(notif)
@@ -1233,53 +1389,83 @@ ShellRoot {
 
     property var displayNotif: null
 
-    RowLayout {
-      anchors.centerIn: parent
-      spacing: 12
+    // wrapper so the whole card content is clickable (cardRow is a Row,
+    // so a MouseArea can't anchor-fill it directly)
+    Item {
+      implicitWidth: fsRow.implicitWidth
+      implicitHeight: fsRow.implicitHeight
+      width: implicitWidth
+      height: implicitHeight
 
-      Text {
-        text: String.fromCodePoint(0xf0f3)
-        color: Theme.fg
-        font { family: Theme.nerdFontFamily; pixelSize: 14 }
-        visible: cardIcon.status !== Image.Ready
-      }
-
-      Image {
-        id: cardIcon
-        width: 23; height: 23
-        fillMode: Image.PreserveAspectCrop
-        source: {
-          if (fsNotif.displayNotif && fsNotif.displayNotif.image) return fsNotif.displayNotif.image
-          if (fsNotif.displayNotif && fsNotif.displayNotif.appIcon) {
-            return fsNotif.displayNotif.appIcon.startsWith("/")
-              ? "file://" + fsNotif.displayNotif.appIcon
-              : "image://icon/" + fsNotif.displayNotif.appIcon
-          }
-          return ""
-        }
-        sourceSize: Qt.size(23, 23)
-        visible: status === Image.Ready
-      }
-
-      ColumnLayout {
-        spacing: 3
+      RowLayout {
+        id: fsRow
+        anchors.centerIn: parent
+        spacing: 12
 
         Text {
-          text: fsNotif.displayNotif ? fsNotif.displayNotif.summary : ""
+          text: String.fromCodePoint(0xf0f3)
           color: Theme.fg
-          font { family: Theme.fontFamily; pixelSize: 10; weight: 700 }
-          elide: Text.ElideRight
-          Layout.maximumWidth: 200
+          font { family: Theme.nerdFontFamily; pixelSize: 14 }
+          visible: cardIcon.status !== Image.Ready
         }
 
-        Text {
-          text: fsNotif.displayNotif ? fsNotif.displayNotif.body : ""
-          color: "#9b9b9b"
-          font { family: Theme.fontFamily; pixelSize: 9 }
-          elide: Text.ElideRight
-          visible: text !== ""
-          Layout.maximumWidth: 200
+        Image {
+          id: cardIcon
+          width: 23; height: 23
+          fillMode: Image.PreserveAspectCrop
+          source: {
+            if (fsNotif.displayNotif && fsNotif.displayNotif.image) return fsNotif.displayNotif.image
+            if (fsNotif.displayNotif && fsNotif.displayNotif.appIcon) {
+              return fsNotif.displayNotif.appIcon.startsWith("/")
+                ? "file://" + fsNotif.displayNotif.appIcon
+                : "image://icon/" + fsNotif.displayNotif.appIcon
+            }
+            return ""
+          }
+          sourceSize: Qt.size(23, 23)
+          visible: status === Image.Ready
         }
+
+        ColumnLayout {
+          spacing: 3
+
+          Text {
+            text: fsNotif.displayNotif ? fsNotif.displayNotif.summary : ""
+            color: Theme.fg
+            font { family: Theme.fontFamily; pixelSize: 10; weight: 700 }
+            elide: Text.ElideRight
+            Layout.maximumWidth: 200
+          }
+
+          Text {
+            text: fsNotif.displayNotif ? fsNotif.displayNotif.body : ""
+            color: "#9b9b9b"
+            font { family: Theme.fontFamily; pixelSize: 9 }
+            elide: Text.ElideRight
+            visible: text !== ""
+            Layout.maximumWidth: 200
+          }
+        }
+      }
+
+      MouseArea {
+        id: fsCardArea
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        cursorShape: Qt.PointingHandCursor
+        onClicked: (mouse) => {
+          if (mouse.button === Qt.LeftButton)
+            notificationModule.activate(notificationModule.current)
+          else
+            notificationModule.hideToast()
+        }
+      }
+
+      Binding {
+        target: notificationModule
+        property: "cardHovered"
+        value: fsCardArea.containsMouse && notifFullscreenMode
       }
     }
   }
